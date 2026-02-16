@@ -50,6 +50,8 @@ from zapry_agents_sdk.guardrails.engine import (
     output_guardrail,
 )
 from zapry_agents_sdk.tracing.engine import Tracer, Span, SpanKind, ConsoleExporter
+from zapry_agents_sdk.mcp.manager import MCPManager
+from zapry_agents_sdk.mcp.config import MCPServerConfig, MCPManagerConfig
 
 __all__ = [
     "ZapryAgent",
@@ -93,5 +95,8 @@ __all__ = [
     "HandoffEngine",
     "AgentOrchestrator",
     "HandoffPolicy",
+    "MCPManager",
+    "MCPServerConfig",
+    "MCPManagerConfig",
     "__version__",
 ]

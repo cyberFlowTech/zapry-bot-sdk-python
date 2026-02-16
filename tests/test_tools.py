@@ -412,3 +412,59 @@ class TestOpenAIToolAdapter:
         r = ToolCallResult(tool_call_id="c1", name="t", error="oops")
         m = r.to_message()
         assert m["content"] == "oops"
+
+
+# ══════════════════════════════════════════════
+# RawJSONSchema tests
+# ══════════════════════════════════════════════
+
+
+class TestToolDefRawJSONSchema:
+    """ToolDef.raw_json_schema 测试。"""
+
+    def test_raw_json_schema_overrides_parameters(self):
+        raw_schema = {
+            "type": "object",
+            "properties": {
+                "path": {"type": "string", "description": "File path"},
+                "options": {
+                    "type": "object",
+                    "properties": {
+                        "encoding": {"type": "string"},
+                    },
+                },
+            },
+            "required": ["path"],
+        }
+        td = ToolDef(
+            name="mcp.fs.read_file",
+            description="[MCP:fs] Read file",
+            parameters=[ToolParam(name="path", type="string", required=True)],
+            raw_json_schema=raw_schema,
+        )
+        schema = td.to_json_schema()
+        assert schema["name"] == "mcp.fs.read_file"
+        assert schema["description"] == "[MCP:fs] Read file"
+        assert schema["parameters"] is raw_schema
+        assert "options" in schema["parameters"]["properties"]
+
+        oai = td.to_openai_schema()
+        assert oai["type"] == "function"
+        assert oai["function"]["name"] == "mcp.fs.read_file"
+
+    def test_raw_json_schema_nil_fallback(self):
+        td = ToolDef(
+            name="local_tool",
+            description="A local tool",
+            parameters=[
+                ToolParam(name="x", type="string", description="param x", required=True),
+                ToolParam(name="y", type="integer", required=False, default=5),
+            ],
+        )
+        schema = td.to_json_schema()
+        assert schema["name"] == "local_tool"
+        params = schema["parameters"]
+        assert params["type"] == "object"
+        assert "x" in params["properties"]
+        assert "y" in params["properties"]
+        assert params["required"] == ["x"]

@@ -23,6 +23,7 @@
 - **Agent Loop** — ReAct 自动推理循环，LLM 自主调用工具直到产出最终回答
 - **Guardrails 安全护栏** — Input/Output 护栏 + Tripwire 机制，防 prompt injection/内容泄露
 - **Tracing 结构化追踪** — agent/llm/tool/guardrail Span 层级追踪，可导出到 OpenTelemetry
+- **MCP Client** — 连接任意 MCP 服务器（Stdio/HTTP），自动发现工具并注入 ToolRegistry，与 AgentLoop 无缝集成
 
 ## 快速开始
 
@@ -384,6 +385,83 @@ result = await loop.run(
 )
 ```
 
+## MCP Client — 连接任意 MCP 服务器
+
+SDK 内置 MCP（Model Context Protocol）客户端，让你的 Agent 连接任意 MCP 服务器，自动发现工具并通过标准 `ToolRegistry` 使用 —— `AgentLoop` 完全透明。
+
+**支持的传输方式：**
+- **HTTP** — 远程/云端 MCP 服务器
+- **Stdio** — 本地 MCP 服务器（如 `npx @modelcontextprotocol/server-filesystem`）
+
+### 快速开始
+
+```python
+from zapry_agents_sdk import MCPManager, MCPServerConfig, ToolRegistry, AgentLoop
+
+mcp = MCPManager()
+
+# 连接 MCP 服务器
+await mcp.add_server(MCPServerConfig(
+    name="filesystem",
+    transport="stdio",
+    command="npx",
+    args=["-y", "@modelcontextprotocol/server-filesystem", "/tmp"],
+))
+
+await mcp.add_server(MCPServerConfig(
+    name="search",
+    transport="http",
+    url="https://mcp.example.com/search",
+    headers={"Authorization": "Bearer xxx"},
+))
+
+# 注入到 ToolRegistry（与本地工具共存）
+registry = ToolRegistry()
+registry.register(my_local_tool)   # 你的本地工具
+mcp.inject_tools(registry)         # MCP 工具自动添加
+
+# AgentLoop 透明使用 MCP 工具
+loop = AgentLoop(llm_fn=my_llm, tool_registry=registry)
+result = await loop.run("读取 /tmp/data.txt")
+
+# 清理
+await mcp.disconnect_all()
+```
+
+### 工具过滤
+
+过滤匹配**原始 MCP 工具名**（不是注入后的 SDK 名），支持 `fnmatch` 通配符：
+
+```python
+await mcp.add_server(MCPServerConfig(
+    name="filesystem",
+    transport="stdio",
+    command="npx",
+    args=["-y", "@modelcontextprotocol/server-filesystem", "/tmp"],
+    allowed_tools=["read_*", "list_*"],   # 只允许读/列表工具
+    blocked_tools=["write_*", "delete_*"], # 阻止危险工具
+    max_tools=10,                           # 限制上下文大小
+))
+```
+
+### 工具命名
+
+MCP 工具注入时添加 `mcp.{server}.{tool}` 前缀：
+- `read_file` on server `filesystem` → `mcp.filesystem.read_file`
+- `query` on server `database` → `mcp.database.query`
+
+### 注入行为
+
+- **幂等**：多次调用 `inject_tools()` 安全（先移除旧的再注入）
+- **精确移除**：`remove_tools()` 只移除 MCP 注入的工具，不影响本地工具
+- **调用方控制**：注入由你决定，不在 `AgentLoop.run()` 中 —— 无并发问题
+
+### Schema 保真
+
+MCP 工具的 `inputSchema` 原样保留在 `ToolDef.raw_json_schema` 中。发送给 LLM 时使用原始 JSON Schema（包括嵌套对象、`oneOf`、`enum` 等），不做有损转换。
+
+---
+
 ## 项目结构
 
 ```
@@ -410,6 +488,13 @@ zapry-agents-sdk/
 │   │   └── engine.py        # Guardrails 安全护栏 + Tripwire 机制
 │   ├── tracing/
 │   │   └── engine.py        # 结构化 Span 追踪系统
+│   ├── mcp/
+│   │   ├── __init__.py      # MCP 模块入口
+│   │   ├── config.py        # MCPServerConfig, 工具过滤
+│   │   ├── transport.py     # HTTPTransport, StdioTransport, InProcessTransport
+│   │   ├── protocol.py      # JSON-RPC 2.0, MCPClient, MCPError
+│   │   ├── converter.py     # MCP tool → SDK ToolDef 转换
+│   │   └── manager.py       # MCPManager 统一管理
 │   ├── memory/
 │   │   ├── session.py       # MemorySession 便捷 API
 │   │   ├── store.py         # MemoryStore Protocol + InMemoryStore

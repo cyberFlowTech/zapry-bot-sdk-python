@@ -100,6 +100,8 @@ class ToolDef:
         parameters: List of parameter definitions.
         handler: The actual callable to execute.
         is_async: Whether the handler is async.
+        raw_json_schema: Optional raw JSON Schema for parameters (used by MCP
+            tools to preserve nested/oneOf/enum fidelity).
     """
 
     name: str
@@ -107,9 +109,22 @@ class ToolDef:
     parameters: List[ToolParam] = field(default_factory=list)
     handler: Optional[Callable] = None
     is_async: bool = True
+    raw_json_schema: Optional[Dict[str, Any]] = None
 
     def to_json_schema(self) -> Dict[str, Any]:
-        """Export this tool as a JSON Schema object."""
+        """Export this tool as a JSON Schema object.
+
+        If *raw_json_schema* is set (e.g. from MCP), it is used as the
+        ``parameters`` value to preserve nested/oneOf/enum fidelity.
+        Otherwise, parameters are built from :class:`ToolParam`.
+        """
+        if self.raw_json_schema is not None:
+            return {
+                "name": self.name,
+                "description": self.description,
+                "parameters": self.raw_json_schema,
+            }
+
         properties: Dict[str, Any] = {}
         required: List[str] = []
 
