@@ -13,6 +13,9 @@
 - **模块化注册** — `HandlerRegistry` 支持分模块管理 Handler
 - **灵活配置** — 从 `.env` 或代码直接构造配置
 - **Webhook + Polling** — 两种运行模式开箱即用
+- **主动触发调度器** — `ProactiveScheduler` 定时触发主动消息，支持自定义触发器
+- **反馈检测框架** — `FeedbackDetector` 自动检测用户反馈信号，调整回复风格
+- **偏好注入工具** — `build_preference_prompt()` 将偏好转为 AI system prompt
 
 ## 快速开始
 
@@ -82,6 +85,94 @@ bot.run()
 | `WEBAPP_PORT` | 监听端口 | `8443` |
 | `DEBUG` | 调试模式 | `false` |
 
+## 主动触发 & 自我反思
+
+### ProactiveScheduler — 主动消息调度器
+
+让 Bot 主动关心用户，定时检查触发条件并发送消息。
+
+```python
+from zapry_bot_sdk import ProactiveScheduler
+
+# 创建调度器（60 秒轮询一次）
+scheduler = ProactiveScheduler(
+    interval=60,
+    send_fn=my_send_message,  # async def send(user_id, text)
+)
+
+# 方式 1：装饰器注册触发器
+@scheduler.trigger("daily_greeting")
+async def check_greeting(ctx):
+    if ctx.now.hour == 12 and ctx.now.minute <= 30:
+        return ["user_001", "user_002"]  # 需要发送的用户
+    return []
+
+@check_greeting.message
+async def greeting_msg(ctx, user_id):
+    return f"中午好~ 今天状态怎么样？"
+
+# 方式 2：编程式注册
+scheduler.add_trigger("birthday", check_fn, message_fn)
+
+# 生命周期
+await scheduler.start()   # 启动后台轮询
+await scheduler.stop()    # 停止
+
+# 用户级开关
+await scheduler.enable_user("user_001")
+await scheduler.disable_user("user_001")
+```
+
+### FeedbackDetector — 反馈检测 & 偏好调整
+
+从用户消息中检测反馈信号（如"太长了"→简洁风格），自动调整偏好。
+
+```python
+from zapry_bot_sdk import FeedbackDetector, build_preference_prompt
+
+detector = FeedbackDetector()
+
+# 检测反馈信号
+result = detector.detect("太长了，说重点")
+# result.matched => True
+# result.changes => {"style": "concise"}
+
+# 一步完成检测 + 更新偏好
+prefs = {"style": "balanced"}
+await detector.detect_and_adapt("user_001", "太长了", prefs)
+# prefs => {"style": "concise", "updated_at": "..."}
+
+# 自定义关键词（默认中文，可覆盖）
+detector.add_pattern("language", "english", ["speak english", "in english"])
+
+# 偏好注入 AI prompt
+prompt = build_preference_prompt({"style": "concise", "tone": "casual"})
+# => "回复风格偏好：\n这位用户偏好简洁的回复..."
+```
+
+### 与 ZapryBot 集成
+
+```python
+bot = ZapryBot(config)
+scheduler = ProactiveScheduler(interval=60)
+detector = FeedbackDetector()
+
+@bot.on_post_init
+async def post_init(app):
+    scheduler.send_fn = lambda uid, text: app.bot.send_message(int(uid), text)
+    await scheduler.start()
+
+@bot.on_post_shutdown
+async def shutdown(app):
+    await scheduler.stop()
+
+@bot.message()
+async def on_message(update, context):
+    user_id = str(update.effective_user.id)
+    # 在回复后异步检测反馈
+    result = await detector.detect_and_adapt(user_id, update.message.text, user_prefs)
+```
+
 ## 项目结构
 
 ```
@@ -97,12 +188,17 @@ zapry-bot-sdk/
 │   ├── helpers/
 │   │   ├── __init__.py
 │   │   └── handler_registry.py  # Handler 注册装饰器 & Registry
+│   ├── proactive/
+│   │   ├── __init__.py      # 主动触发 & 反馈检测模块
+│   │   ├── scheduler.py     # ProactiveScheduler 主动消息调度器
+│   │   └── feedback.py      # FeedbackDetector 反馈检测 & 偏好注入
 │   └── utils/
 │       ├── __init__.py
 │       ├── telegram_compat.py   # Zapry 兼容层（Monkey Patch）
 │       └── logger.py            # 日志工具
 └── tests/
-    └── test_compat.py
+    ├── test_compat.py
+    └── test_proactive.py    # 主动触发 & 反馈检测测试（44 项）
 ```
 
 ## Zapry 兼容性

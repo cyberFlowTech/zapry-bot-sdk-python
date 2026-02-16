@@ -22,6 +22,12 @@ __version__ = "0.1.0"
 from zapry_bot_sdk.core.config import BotConfig
 from zapry_bot_sdk.core.bot import ZapryBot
 from zapry_bot_sdk.helpers.handler_registry import command, callback_query, message
+from zapry_bot_sdk.proactive.scheduler import ProactiveScheduler, TriggerContext
+from zapry_bot_sdk.proactive.feedback import (
+    FeedbackDetector,
+    FeedbackResult,
+    build_preference_prompt,
+)
 
 __all__ = [
     "ZapryBot",
@@ -29,5 +35,10 @@ __all__ = [
     "command",
     "callback_query",
     "message",
+    "ProactiveScheduler",
+    "TriggerContext",
+    "FeedbackDetector",
+    "FeedbackResult",
+    "build_preference_prompt",
     "__version__",
 ]
