@@ -17,7 +17,7 @@ Quick Start:
     bot.run()
 """
 
-__version__ = "0.5.0"
+__version__ = "0.6.0"
 
 from zapry_bot_sdk.core.config import BotConfig
 from zapry_bot_sdk.core.bot import ZapryBot
@@ -34,6 +34,12 @@ from zapry_bot_sdk.memory.session import MemorySession
 from zapry_bot_sdk.memory.store import InMemoryStore
 from zapry_bot_sdk.memory.store_sqlite import SQLiteMemoryStore
 from zapry_bot_sdk.agent.loop import AgentLoop, AgentResult, AgentHooks
+from zapry_bot_sdk.agent.card import AgentCardPublic, AgentRuntime
+from zapry_bot_sdk.agent.registry import AgentRegistry
+from zapry_bot_sdk.agent.handoff import HandoffRequest, HandoffResult
+from zapry_bot_sdk.agent.engine import HandoffEngine
+from zapry_bot_sdk.agent.orchestrator import AgentOrchestrator
+from zapry_bot_sdk.agent.policy import HandoffPolicy
 from zapry_bot_sdk.guardrails.engine import (
     GuardrailManager,
     GuardrailResult,
@@ -79,5 +85,13 @@ __all__ = [
     "Span",
     "SpanKind",
     "ConsoleExporter",
+    "AgentCardPublic",
+    "AgentRuntime",
+    "AgentRegistry",
+    "HandoffRequest",
+    "HandoffResult",
+    "HandoffEngine",
+    "AgentOrchestrator",
+    "HandoffPolicy",
     "__version__",
 ]

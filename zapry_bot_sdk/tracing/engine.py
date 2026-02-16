@@ -35,6 +35,7 @@ class SpanKind(str, Enum):
     LLM = "llm"
     TOOL = "tool"
     GUARDRAIL = "guardrail"
+    HANDOFF = "handoff"
     CUSTOM = "custom"
 
 

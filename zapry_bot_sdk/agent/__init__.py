@@ -1,32 +1,47 @@
 """
-Agent Loop — 自动推理循环（ReAct 模式）。
-
-让 LLM 自主决策调用工具、获取结果、再决策，直到产出最终回答。
-
-Quick Start::
-
-    from zapry_bot_sdk.agent import AgentLoop
-
-    loop = AgentLoop(
-        llm_fn=my_openai_call,
-        tool_registry=registry,
-        system_prompt="You are a helpful assistant.",
-    )
-
-    result = await loop.run("What's the weather in Shanghai?")
-    print(result.final_output)
+Agent 框架 — AgentLoop + Multi-Agent Handoff。
 """
 
-from zapry_bot_sdk.agent.loop import (
-    AgentLoop,
-    AgentResult,
-    TurnRecord,
-    AgentHooks,
+from zapry_bot_sdk.agent.loop import AgentLoop, AgentResult, TurnRecord, AgentHooks
+from zapry_bot_sdk.agent.card import AgentCardPublic, AgentRuntime
+from zapry_bot_sdk.agent.registry import AgentRegistry
+from zapry_bot_sdk.agent.handoff import (
+    HandoffMessage,
+    HandoffError,
+    HandoffContext,
+    HandoffRequest,
+    HandoffResult,
+    InputFilterFn,
+    last_n_messages,
+    summary_only,
+    allow_all,
+    platform_redact,
 )
+from zapry_bot_sdk.agent.policy import HandoffPolicy, IdempotencyCache
+from zapry_bot_sdk.agent.engine import HandoffEngine
+from zapry_bot_sdk.agent.orchestrator import AgentOrchestrator, CoordinatorDecision
 
 __all__ = [
     "AgentLoop",
     "AgentResult",
     "TurnRecord",
     "AgentHooks",
+    "AgentCardPublic",
+    "AgentRuntime",
+    "AgentRegistry",
+    "HandoffMessage",
+    "HandoffError",
+    "HandoffContext",
+    "HandoffRequest",
+    "HandoffResult",
+    "InputFilterFn",
+    "last_n_messages",
+    "summary_only",
+    "allow_all",
+    "platform_redact",
+    "HandoffPolicy",
+    "IdempotencyCache",
+    "HandoffEngine",
+    "AgentOrchestrator",
+    "CoordinatorDecision",
 ]
