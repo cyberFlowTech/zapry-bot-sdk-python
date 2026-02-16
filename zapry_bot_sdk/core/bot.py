@@ -31,6 +31,11 @@ from telegram.ext import (
 )
 
 from zapry_bot_sdk.core.config import BotConfig
+from zapry_bot_sdk.core.middleware import (
+    MiddlewareContext,
+    MiddlewareFunc,
+    MiddlewarePipeline,
+)
 from zapry_bot_sdk.helpers.handler_registry import (
     HandlerRegistry,
     get_global_handlers,
@@ -71,6 +76,7 @@ class ZapryBot:
         self._post_init_hooks: List[Callable] = []
         self._post_shutdown_hooks: List[Callable] = []
         self._input_logger_enabled: bool = True
+        self._middleware_pipeline: MiddlewarePipeline = MiddlewarePipeline()
 
         # 如果是 Zapry 平台，应用兼容层
         if config.is_zapry:
@@ -127,6 +133,27 @@ class ZapryBot:
         """注册 Application post_shutdown 钩子。"""
         self._post_shutdown_hooks.append(func)
         return func
+
+    # ─── Middleware ───
+
+    def use(self, middleware: MiddlewareFunc) -> None:
+        """Register a global middleware (onion model).
+
+        Middlewares execute in registration order, wrapping the handler
+        dispatch.  Each middleware receives ``(ctx, next_fn)`` and **must**
+        call ``await next_fn()`` to proceed to the next layer.
+
+        Example::
+
+            async def timer(ctx, next_fn):
+                import time
+                start = time.time()
+                await next_fn()
+                print(f"took {time.time() - start:.3f}s")
+
+            bot.use(timer)
+        """
+        self._middleware_pipeline.use(middleware)
 
     # ─── 手动注册 handler (从外部模块批量导入) ───
 
@@ -198,6 +225,43 @@ class ZapryBot:
         if self._input_logger_enabled:
             application.add_handler(
                 TypeHandler(Update, _log_user_input), group=-1
+            )
+
+        # Middleware pipeline — runs at group=-2 (before logging at -1).
+        # The pipeline wraps all subsequent handler dispatch.  When the
+        # innermost ``next_fn`` is called, execution continues to the
+        # normal handler groups (0+).  If a middleware does NOT call
+        # ``next_fn``, the update is intercepted and handlers are skipped.
+        if len(self._middleware_pipeline) > 0:
+            pipeline = self._middleware_pipeline
+
+            async def _middleware_handler(
+                update: Update, context: ContextTypes.DEFAULT_TYPE
+            ) -> None:
+                from telegram.ext import ApplicationHandlerStop
+
+                ctx = MiddlewareContext(
+                    update=update,
+                    bot=context.bot,
+                )
+                # Store context on context.user_data so handlers can access it
+                if hasattr(context, "user_data") and context.user_data is not None:
+                    context.user_data["_middleware_ctx"] = ctx
+
+                proceeded = False
+
+                async def core() -> None:
+                    nonlocal proceeded
+                    proceeded = True
+
+                await pipeline.execute(ctx, core)
+
+                if not proceeded:
+                    # A middleware intercepted — stop further processing
+                    raise ApplicationHandlerStop()
+
+            application.add_handler(
+                TypeHandler(Update, _middleware_handler), group=-2
             )
 
         # 注册 command handlers

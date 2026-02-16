@@ -16,6 +16,9 @@
 - **主动触发调度器** — `ProactiveScheduler` 定时触发主动消息，支持自定义触发器
 - **反馈检测框架** — `FeedbackDetector` 自动检测用户反馈信号，调整回复风格
 - **偏好注入工具** — `build_preference_prompt()` 将偏好转为 AI system prompt
+- **Middleware 管道** — 洋葱模型中间件，支持 before/after、拦截、上下文传递
+- **Tool Calling 框架** — `@tool` 装饰器自动生成 JSON schema，`ToolRegistry` 统一管理
+- **OpenAI 适配器** — `OpenAIToolAdapter` 一键对接 OpenAI function calling
 
 ## 快速开始
 
@@ -173,6 +176,86 @@ async def on_message(update, context):
     result = await detector.detect_and_adapt(user_id, update.message.text, user_prefs)
 ```
 
+## Middleware 管道
+
+洋葱模型中间件，每个 middleware 包裹下一层，可在 handler 前后执行逻辑。
+
+```python
+from zapry_bot_sdk import ZapryBot, BotConfig
+
+bot = ZapryBot(BotConfig.from_env())
+
+# 注册中间件（按顺序包裹）
+async def timer_middleware(ctx, next_fn):
+    import time
+    start = time.time()
+    await next_fn()  # 调用下一层
+    print(f"耗时: {time.time() - start:.3f}s")
+
+async def auth_middleware(ctx, next_fn):
+    if not is_authorized(ctx.update):
+        return  # 不调用 next_fn → 拦截
+    ctx.extra["role"] = "admin"
+    await next_fn()
+
+bot.use(timer_middleware)
+bot.use(auth_middleware)
+```
+
+执行顺序: `timer before → auth before → handler → auth after → timer after`
+
+## Tool Calling 框架
+
+LLM-agnostic 的工具注册、schema 管理与调用分发。
+
+```python
+from zapry_bot_sdk.tools import tool, ToolRegistry
+
+# @tool 装饰器自动从 type hints + docstring 生成 JSON schema
+@tool
+async def get_weather(city: str, unit: str = "celsius") -> str:
+    """获取指定城市的当前天气。
+
+    Args:
+        city: 城市名称
+        unit: 温度单位
+    """
+    return f"{city}: 25°C, 晴"
+
+registry = ToolRegistry()
+registry.register(get_weather)
+
+# 导出 schema
+schema = registry.to_json_schema()
+openai_tools = registry.to_openai_schema()
+
+# 执行工具
+result = await registry.execute("get_weather", {"city": "上海"})
+```
+
+### OpenAI Function Calling 适配器
+
+```python
+from zapry_bot_sdk.tools.openai_adapter import OpenAIToolAdapter
+
+adapter = OpenAIToolAdapter(registry)
+
+# 1. 获取 tools 参数
+tools_param = adapter.to_openai_tools()
+
+# 2. 调用 OpenAI
+response = await client.chat.completions.create(
+    model="gpt-4o", messages=messages, tools=tools_param,
+)
+
+# 3. 处理 tool_calls
+if response.choices[0].message.tool_calls:
+    results = await adapter.handle_tool_calls(
+        response.choices[0].message.tool_calls
+    )
+    messages.extend(adapter.results_to_messages(results))
+```
+
 ## 项目结构
 
 ```
@@ -180,25 +263,27 @@ zapry-bot-sdk/
 ├── pyproject.toml
 ├── README.md
 ├── zapry_bot_sdk/
-│   ├── __init__.py          # 包入口，导出 ZapryBot, BotConfig 等
+│   ├── __init__.py          # 包入口
 │   ├── core/
-│   │   ├── __init__.py
-│   │   ├── bot.py           # ZapryBot 主类
-│   │   └── config.py        # BotConfig 配置
+│   │   ├── bot.py           # ZapryBot 主类（含 middleware 集成）
+│   │   ├── config.py        # BotConfig 配置
+│   │   └── middleware.py    # Middleware 洋葱管道
 │   ├── helpers/
-│   │   ├── __init__.py
 │   │   └── handler_registry.py  # Handler 注册装饰器 & Registry
 │   ├── proactive/
-│   │   ├── __init__.py      # 主动触发 & 反馈检测模块
 │   │   ├── scheduler.py     # ProactiveScheduler 主动消息调度器
 │   │   └── feedback.py      # FeedbackDetector 反馈检测 & 偏好注入
+│   ├── tools/
+│   │   ├── registry.py      # @tool 装饰器 + ToolRegistry + schema 生成
+│   │   └── openai_adapter.py # OpenAI function calling 适配器
 │   └── utils/
-│       ├── __init__.py
-│       ├── telegram_compat.py   # Zapry 兼容层（Monkey Patch）
+│       ├── telegram_compat.py   # Zapry 兼容层
 │       └── logger.py            # 日志工具
 └── tests/
-    ├── test_compat.py
-    └── test_proactive.py    # 主动触发 & 反馈检测测试（44 项）
+    ├── test_compat.py       # 兼容层测试
+    ├── test_proactive.py    # 主动触发 & 反馈检测测试（44 项）
+    ├── test_middleware.py   # Middleware 管道测试（9 项）
+    └── test_tools.py        # Tool Calling + OpenAI 适配器测试（32 项）
 ```
 
 ## Zapry 兼容性

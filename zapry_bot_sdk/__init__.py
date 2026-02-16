@@ -17,10 +17,11 @@ Quick Start:
     bot.run()
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 from zapry_bot_sdk.core.config import BotConfig
 from zapry_bot_sdk.core.bot import ZapryBot
+from zapry_bot_sdk.core.middleware import MiddlewareContext, MiddlewarePipeline
 from zapry_bot_sdk.helpers.handler_registry import command, callback_query, message
 from zapry_bot_sdk.proactive.scheduler import ProactiveScheduler, TriggerContext
 from zapry_bot_sdk.proactive.feedback import (
@@ -28,10 +29,13 @@ from zapry_bot_sdk.proactive.feedback import (
     FeedbackResult,
     build_preference_prompt,
 )
+from zapry_bot_sdk.tools.registry import ToolRegistry, ToolDef, ToolContext, tool
 
 __all__ = [
     "ZapryBot",
     "BotConfig",
+    "MiddlewareContext",
+    "MiddlewarePipeline",
     "command",
     "callback_query",
     "message",
@@ -40,5 +44,9 @@ __all__ = [
     "FeedbackDetector",
     "FeedbackResult",
     "build_preference_prompt",
+    "ToolRegistry",
+    "ToolDef",
+    "ToolContext",
+    "tool",
     "__version__",
 ]
