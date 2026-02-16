@@ -5,16 +5,16 @@ Memory 持久化框架全量测试。
 import json
 import pytest
 
-from zapry_bot_sdk.memory.types import Message, MemoryContext, DEFAULT_MEMORY_SCHEMA
-from zapry_bot_sdk.memory.store import InMemoryStore
-from zapry_bot_sdk.memory.store_sqlite import SQLiteMemoryStore
-from zapry_bot_sdk.memory.working import WorkingMemory
-from zapry_bot_sdk.memory.short_term import ShortTermMemory
-from zapry_bot_sdk.memory.long_term import LongTermMemory
-from zapry_bot_sdk.memory.buffer import ConversationBuffer
-from zapry_bot_sdk.memory.extractor import LLMMemoryExtractor, _parse_json_response
-from zapry_bot_sdk.memory.formatter import format_memory_for_prompt
-from zapry_bot_sdk.memory.session import MemorySession
+from zapry_agents_sdk.memory.types import Message, MemoryContext, DEFAULT_MEMORY_SCHEMA
+from zapry_agents_sdk.memory.store import InMemoryStore
+from zapry_agents_sdk.memory.store_sqlite import SQLiteMemoryStore
+from zapry_agents_sdk.memory.working import WorkingMemory
+from zapry_agents_sdk.memory.short_term import ShortTermMemory
+from zapry_agents_sdk.memory.long_term import LongTermMemory
+from zapry_agents_sdk.memory.buffer import ConversationBuffer
+from zapry_agents_sdk.memory.extractor import LLMMemoryExtractor, _parse_json_response
+from zapry_agents_sdk.memory.formatter import format_memory_for_prompt
+from zapry_agents_sdk.memory.session import MemorySession
 
 
 # ══════════════════════════════════════════════

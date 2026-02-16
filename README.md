@@ -29,16 +29,16 @@
 ### 安装
 
 ```bash
-pip install -e /path/to/zapry-bot-sdk-python
+pip install -e /path/to/zapry-agents-sdk-python
 ```
 
 ### 最小示例
 
 ```python
-from zapry_bot_sdk import ZapryBot, BotConfig
+from zapry_agents_sdk import ZapryAgent, AgentConfig
 
-config = BotConfig.from_env()
-bot = ZapryBot(config)
+config = AgentConfig.from_env()
+bot = ZapryAgent(config)
 
 @bot.command("start")
 async def start(update, context):
@@ -55,7 +55,7 @@ bot.run()
 
 ```python
 # handlers/tarot.py
-from zapry_bot_sdk.helpers import HandlerRegistry
+from zapry_agents_sdk.helpers import HandlerRegistry
 
 tarot = HandlerRegistry()
 
@@ -68,10 +68,10 @@ async def reveal_card(update, context):
     ...
 
 # main.py
-from zapry_bot_sdk import ZapryBot, BotConfig
+from zapry_agents_sdk import ZapryAgent, AgentConfig
 from handlers.tarot import tarot
 
-bot = ZapryBot(BotConfig.from_env())
+bot = ZapryAgent(AgentConfig.from_env())
 bot.register(tarot)
 bot.run()
 ```
@@ -99,7 +99,7 @@ bot.run()
 让 Bot 主动关心用户，定时检查触发条件并发送消息。
 
 ```python
-from zapry_bot_sdk import ProactiveScheduler
+from zapry_agents_sdk import ProactiveScheduler
 
 # 创建调度器（60 秒轮询一次）
 scheduler = ProactiveScheduler(
@@ -135,7 +135,7 @@ await scheduler.disable_user("user_001")
 从用户消息中检测反馈信号（如"太长了"→简洁风格），自动调整偏好。
 
 ```python
-from zapry_bot_sdk import FeedbackDetector, build_preference_prompt
+from zapry_agents_sdk import FeedbackDetector, build_preference_prompt
 
 detector = FeedbackDetector()
 
@@ -157,10 +157,10 @@ prompt = build_preference_prompt({"style": "concise", "tone": "casual"})
 # => "回复风格偏好：\n这位用户偏好简洁的回复..."
 ```
 
-### 与 ZapryBot 集成
+### 与 ZapryAgent 集成
 
 ```python
-bot = ZapryBot(config)
+bot = ZapryAgent(config)
 scheduler = ProactiveScheduler(interval=60)
 detector = FeedbackDetector()
 
@@ -185,9 +185,9 @@ async def on_message(update, context):
 洋葱模型中间件，每个 middleware 包裹下一层，可在 handler 前后执行逻辑。
 
 ```python
-from zapry_bot_sdk import ZapryBot, BotConfig
+from zapry_agents_sdk import ZapryAgent, AgentConfig
 
-bot = ZapryBot(BotConfig.from_env())
+bot = ZapryAgent(AgentConfig.from_env())
 
 # 注册中间件（按顺序包裹）
 async def timer_middleware(ctx, next_fn):
@@ -213,7 +213,7 @@ bot.use(auth_middleware)
 LLM-agnostic 的工具注册、schema 管理与调用分发。
 
 ```python
-from zapry_bot_sdk.tools import tool, ToolRegistry
+from zapry_agents_sdk.tools import tool, ToolRegistry
 
 # @tool 装饰器自动从 type hints + docstring 生成 JSON schema
 @tool
@@ -240,7 +240,7 @@ result = await registry.execute("get_weather", {"city": "上海"})
 ### OpenAI Function Calling 适配器
 
 ```python
-from zapry_bot_sdk.tools.openai_adapter import OpenAIToolAdapter
+from zapry_agents_sdk.tools.openai_adapter import OpenAIToolAdapter
 
 adapter = OpenAIToolAdapter(registry)
 
@@ -265,7 +265,7 @@ if response.choices[0].message.tool_calls:
 三层记忆模型，按 `{agent_id}:{user_id}` 隔离，可插拔存储后端。
 
 ```python
-from zapry_bot_sdk.memory import MemorySession, InMemoryStore, SQLiteMemoryStore
+from zapry_agents_sdk.memory import MemorySession, InMemoryStore, SQLiteMemoryStore
 
 # 创建 session（agent+user 隔离）
 session = MemorySession(
@@ -288,7 +288,7 @@ await session.add_message("assistant", "了解了~")
 prompt = session.format_for_prompt()
 
 # 自动记忆提取（需设置 extractor）
-from zapry_bot_sdk.memory import LLMMemoryExtractor
+from zapry_agents_sdk.memory import LLMMemoryExtractor
 session.extractor = LLMMemoryExtractor(llm_fn=my_llm_call)
 await session.extract_if_needed()
 
@@ -326,8 +326,8 @@ bot.use(memory_middleware)
 ReAct 模式：LLM 自主决策调用工具、获取结果、再决策，直到产出最终回答。
 
 ```python
-from zapry_bot_sdk.agent import AgentLoop
-from zapry_bot_sdk.tools import ToolRegistry, tool
+from zapry_agents_sdk.agent import AgentLoop
+from zapry_agents_sdk.tools import ToolRegistry, tool
 
 @tool
 async def get_weather(city: str) -> str:
@@ -360,7 +360,7 @@ print(result.stopped_reason)     # "completed"
 ### 事件钩子（可观测性）
 
 ```python
-from zapry_bot_sdk.agent import AgentHooks
+from zapry_agents_sdk.agent import AgentHooks
 
 hooks = AgentHooks(
     on_llm_start=lambda turn, msgs: print(f"Turn {turn}: calling LLM..."),
@@ -387,14 +387,14 @@ result = await loop.run(
 ## 项目结构
 
 ```
-zapry-bot-sdk/
+zapry-agents-sdk/
 ├── pyproject.toml
 ├── README.md
-├── zapry_bot_sdk/
+├── zapry_agents_sdk/
 │   ├── __init__.py          # 包入口
 │   ├── core/
-│   │   ├── bot.py           # ZapryBot 主类（含 middleware 集成）
-│   │   ├── config.py        # BotConfig 配置
+│   │   ├── bot.py           # ZapryAgent 主类（含 middleware 集成）
+│   │   ├── config.py        # AgentConfig 配置
 │   │   └── middleware.py    # Middleware 洋葱管道
 │   ├── helpers/
 │   │   └── handler_registry.py  # Handler 注册装饰器 & Registry

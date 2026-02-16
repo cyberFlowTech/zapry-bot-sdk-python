@@ -5,8 +5,8 @@ AgentLoop 全量测试 — 模拟 LLM 响应来验证 ReAct 循环的所有行�
 import json
 import pytest
 
-from zapry_bot_sdk.agent.loop import AgentLoop, AgentResult, AgentHooks, TurnRecord
-from zapry_bot_sdk.tools.registry import ToolRegistry, tool
+from zapry_agents_sdk.agent.loop import AgentLoop, AgentResult, AgentHooks, TurnRecord
+from zapry_agents_sdk.tools.registry import ToolRegistry, tool
 
 
 # ══════════════════════════════════════════════

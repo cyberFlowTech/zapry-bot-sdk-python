@@ -3,7 +3,7 @@
 """
 
 import pytest
-from zapry_bot_sdk.core.middleware import (
+from zapry_agents_sdk.core.middleware import (
     MiddlewareContext,
     MiddlewarePipeline,
 )

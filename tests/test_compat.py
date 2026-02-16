@@ -4,7 +4,7 @@
 
 import pytest
 
-from zapry_bot_sdk.utils.telegram_compat import (
+from zapry_agents_sdk.utils.telegram_compat import (
     _normalize_user_data,
     _normalize_chat_data,
     _fix_message_data,

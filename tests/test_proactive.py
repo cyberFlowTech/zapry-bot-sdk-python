@@ -6,12 +6,12 @@ import asyncio
 import pytest
 import pytest_asyncio
 
-from zapry_bot_sdk.proactive.scheduler import (
+from zapry_agents_sdk.proactive.scheduler import (
     ProactiveScheduler,
     TriggerContext,
     InMemoryUserStore,
 )
-from zapry_bot_sdk.proactive.feedback import (
+from zapry_agents_sdk.proactive.feedback import (
     FeedbackDetector,
     FeedbackResult,
     build_preference_prompt,

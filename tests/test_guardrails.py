@@ -5,7 +5,7 @@ Guardrails + Tracing 全量测试。
 import json
 import pytest
 
-from zapry_bot_sdk.guardrails.engine import (
+from zapry_agents_sdk.guardrails.engine import (
     GuardrailManager,
     GuardrailResult,
     GuardrailContext,
@@ -14,7 +14,7 @@ from zapry_bot_sdk.guardrails.engine import (
     input_guardrail,
     output_guardrail,
 )
-from zapry_bot_sdk.tracing.engine import (
+from zapry_agents_sdk.tracing.engine import (
     Tracer,
     Span,
     SpanKind,
@@ -22,8 +22,8 @@ from zapry_bot_sdk.tracing.engine import (
     CallbackExporter,
     NullExporter,
 )
-from zapry_bot_sdk.agent.loop import AgentLoop
-from zapry_bot_sdk.tools.registry import ToolRegistry, tool
+from zapry_agents_sdk.agent.loop import AgentLoop
+from zapry_agents_sdk.tools.registry import ToolRegistry, tool
 
 
 # ══════════════════════════════════════════════

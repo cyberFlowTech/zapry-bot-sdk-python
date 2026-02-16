@@ -4,7 +4,7 @@
 
 import json
 import pytest
-from zapry_bot_sdk.tools.registry import (
+from zapry_agents_sdk.tools.registry import (
     ToolRegistry,
     ToolDef,
     ToolParam,
@@ -12,7 +12,7 @@ from zapry_bot_sdk.tools.registry import (
     tool,
     _extract_tool_def,
 )
-from zapry_bot_sdk.tools.openai_adapter import (
+from zapry_agents_sdk.tools.openai_adapter import (
     OpenAIToolAdapter,
     ToolCallResult,
 )

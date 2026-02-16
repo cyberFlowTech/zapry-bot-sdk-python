@@ -5,16 +5,16 @@ Multi-Agent Handoff 全量测试。
 import json
 import pytest
 
-from zapry_bot_sdk.agent.card import AgentCardPublic, AgentRuntime
-from zapry_bot_sdk.agent.registry import AgentRegistry
-from zapry_bot_sdk.agent.handoff import (
+from zapry_agents_sdk.agent.card import AgentCardPublic, AgentRuntime
+from zapry_agents_sdk.agent.registry import AgentRegistry
+from zapry_agents_sdk.agent.handoff import (
     HandoffMessage, HandoffError, HandoffContext, HandoffRequest, HandoffResult,
     last_n_messages, summary_only, allow_all, platform_redact,
 )
-from zapry_bot_sdk.agent.policy import HandoffPolicy, IdempotencyCache
-from zapry_bot_sdk.agent.engine import HandoffEngine
-from zapry_bot_sdk.agent.orchestrator import AgentOrchestrator, CoordinatorDecision
-from zapry_bot_sdk.tools.registry import ToolRegistry
+from zapry_agents_sdk.agent.policy import HandoffPolicy, IdempotencyCache
+from zapry_agents_sdk.agent.engine import HandoffEngine
+from zapry_agents_sdk.agent.orchestrator import AgentOrchestrator, CoordinatorDecision
+from zapry_agents_sdk.tools.registry import ToolRegistry
 
 
 # ══════════════════════════════════════════════
