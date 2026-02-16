@@ -1,0 +1,33 @@
+"""
+Zapry Bot SDK — 轻量级 Python SDK，用于在 Zapry 平台构建 Bot。
+
+基于 python-telegram-bot，提供 Zapry 平台兼容层、
+配置管理、Handler 注册装饰器等开发便利工具。
+
+Quick Start:
+    from zapry_bot_sdk import ZapryBot, BotConfig
+
+    config = BotConfig.from_env()
+    bot = ZapryBot(config)
+
+    @bot.command("start")
+    async def start(update, context):
+        await update.message.reply_text("Hello!")
+
+    bot.run()
+"""
+
+__version__ = "0.1.0"
+
+from zapry_bot_sdk.core.config import BotConfig
+from zapry_bot_sdk.core.bot import ZapryBot
+from zapry_bot_sdk.helpers.handler_registry import command, callback_query, message
+
+__all__ = [
+    "ZapryBot",
+    "BotConfig",
+    "command",
+    "callback_query",
+    "message",
+    "__version__",
+]
