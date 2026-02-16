@@ -21,6 +21,8 @@
 - **OpenAI 适配器** — `OpenAIToolAdapter` 一键对接 OpenAI function calling
 - **Memory 持久化** — 三层记忆模型（工作/短期/长期），可插拔存储，自动提取，Zapry 云端预留
 - **Agent Loop** — ReAct 自动推理循环，LLM 自主调用工具直到产出最终回答
+- **Guardrails 安全护栏** — Input/Output 护栏 + Tripwire 机制，防 prompt injection/内容泄露
+- **Tracing 结构化追踪** — agent/llm/tool/guardrail Span 层级追踪，可导出到 OpenTelemetry
 
 ## 快速开始
 
@@ -403,7 +405,11 @@ zapry-bot-sdk/
 │   │   ├── registry.py      # @tool 装饰器 + ToolRegistry + schema 生成
 │   │   └── openai_adapter.py # OpenAI function calling 适配器
 │   ├── agent/
-│   │   └── loop.py          # AgentLoop ReAct 推理循环
+│   │   └── loop.py          # AgentLoop ReAct 推理循环（含 Guardrails + Tracing）
+│   ├── guardrails/
+│   │   └── engine.py        # Guardrails 安全护栏 + Tripwire 机制
+│   ├── tracing/
+│   │   └── engine.py        # 结构化 Span 追踪系统
 │   ├── memory/
 │   │   ├── session.py       # MemorySession 便捷 API
 │   │   ├── store.py         # MemoryStore Protocol + InMemoryStore
@@ -424,7 +430,8 @@ zapry-bot-sdk/
     ├── test_middleware.py   # Middleware 管道测试（9 项）
     ├── test_tools.py        # Tool Calling + OpenAI 适配器测试（32 项）
     ├── test_memory.py       # Memory 框架全量测试（55 项）
-    └── test_agent_loop.py   # AgentLoop 测试（17 项）
+    ├── test_agent_loop.py   # AgentLoop 测试（17 项）
+    └── test_guardrails.py   # Guardrails + Tracing 测试（28 项）
 ```
 
 ## Zapry 兼容性

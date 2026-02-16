@@ -49,6 +49,12 @@ from dataclasses import dataclass, field
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 from zapry_bot_sdk.tools.registry import ToolContext, ToolRegistry
+from zapry_bot_sdk.guardrails.engine import (
+    GuardrailManager,
+    InputGuardrailTriggered,
+    OutputGuardrailTriggered,
+)
+from zapry_bot_sdk.tracing.engine import Tracer, SpanKind
 
 logger = logging.getLogger("zapry_bot_sdk.agent")
 
@@ -143,12 +149,16 @@ class AgentLoop:
         system_prompt: str = "",
         max_turns: int = 10,
         hooks: Optional[AgentHooks] = None,
+        guardrails: Optional[GuardrailManager] = None,
+        tracer: Optional[Tracer] = None,
     ) -> None:
         self.llm_fn = llm_fn
         self.tool_registry = tool_registry
         self.system_prompt = system_prompt
         self.max_turns = max_turns
         self.hooks = hooks or AgentHooks()
+        self.guardrails = guardrails
+        self.tracer = tracer
 
     async def run(
         self,
@@ -165,7 +175,36 @@ class AgentLoop:
 
         Returns:
             AgentResult with final output, turn trace, and statistics.
+
+        Raises:
+            InputGuardrailTriggered: If an input guardrail blocks the request.
+            OutputGuardrailTriggered: If an output guardrail blocks the response.
         """
+        # --- Tracing: start agent span ---
+        tracer = self.tracer
+        if tracer and tracer.enabled:
+            tracer.new_trace()
+            with tracer.agent_span("agent_loop", user_input=user_input[:200]):
+                return await self._run_inner(user_input, conversation_history, extra_context)
+        else:
+            return await self._run_inner(user_input, conversation_history, extra_context)
+
+    async def _run_inner(
+        self,
+        user_input: str,
+        conversation_history: Optional[List[Dict]],
+        extra_context: Optional[str],
+    ) -> AgentResult:
+        tracer = self.tracer
+
+        # --- Input Guardrails ---
+        if self.guardrails and self.guardrails.input_count > 0:
+            if tracer:
+                with tracer.guardrail_span("input_guardrails"):
+                    await self.guardrails.check_input(text=user_input)
+            else:
+                await self.guardrails.check_input(text=user_input)
+
         # Build initial messages
         messages: List[Dict] = []
         if self.system_prompt:
@@ -191,7 +230,11 @@ class AgentLoop:
                 if self.hooks.on_llm_start:
                     await self.hooks.on_llm_start(turn_number, messages)
 
-                llm_response = await self.llm_fn(messages, tools_schema)
+                if tracer:
+                    with tracer.llm_span("llm", turn=turn_number) as llm_s:
+                        llm_response = await self.llm_fn(messages, tools_schema)
+                else:
+                    llm_response = await self.llm_fn(messages, tools_schema)
 
                 if self.hooks.on_llm_end:
                     await self.hooks.on_llm_end(turn_number, llm_response)
@@ -204,8 +247,17 @@ class AgentLoop:
 
                 # --- Check: Final output (no tool calls) ---
                 if not tool_calls:
+                    # --- Output Guardrails ---
+                    final_text = content or ""
+                    if self.guardrails and self.guardrails.output_count > 0 and final_text:
+                        if tracer:
+                            with tracer.guardrail_span("output_guardrails"):
+                                await self.guardrails.check_output(text=final_text)
+                        else:
+                            await self.guardrails.check_output(text=final_text)
+
                     turn.is_final = True
-                    result.final_output = content or ""
+                    result.final_output = final_text
                     result.stopped_reason = "completed"
                     result.turns.append(turn)
                     if self.hooks.on_turn_end:
@@ -213,9 +265,7 @@ class AgentLoop:
                     break
 
                 # --- Execute tool calls ---
-                # Append assistant message with tool_calls to history
                 assistant_msg = {"role": "assistant", "content": content or ""}
-                # Attach tool_calls in the format OpenAI expects
                 raw_tool_calls = _serialize_tool_calls(tool_calls)
                 if raw_tool_calls:
                     assistant_msg["tool_calls"] = raw_tool_calls
@@ -227,7 +277,6 @@ class AgentLoop:
                     func_name = _get_attr(func, "name") or ""
                     func_args_raw = _get_attr(func, "arguments") or "{}"
 
-                    # Parse arguments
                     try:
                         func_args = json.loads(func_args_raw) if isinstance(func_args_raw, str) else dict(func_args_raw)
                     except (json.JSONDecodeError, TypeError):
@@ -236,7 +285,6 @@ class AgentLoop:
                     if self.hooks.on_tool_start:
                         await self.hooks.on_tool_start(func_name, func_args)
 
-                    # Execute tool
                     tool_record = ToolCallRecord(
                         tool_name=func_name,
                         arguments=func_args,
@@ -244,9 +292,14 @@ class AgentLoop:
                         call_id=call_id,
                     )
 
+                    # Execute tool (with tracing)
                     try:
                         ctx = ToolContext(tool_name=func_name, call_id=call_id)
-                        tool_result = await self.tool_registry.execute(func_name, func_args, ctx)
+                        if tracer:
+                            with tracer.tool_span(func_name, args=func_args):
+                                tool_result = await self.tool_registry.execute(func_name, func_args, ctx)
+                        else:
+                            tool_result = await self.tool_registry.execute(func_name, func_args, ctx)
                         tool_result_str = tool_result if isinstance(tool_result, str) else json.dumps(tool_result, ensure_ascii=False)
                         tool_record.result = tool_result_str
                     except Exception as e:
@@ -260,7 +313,6 @@ class AgentLoop:
                     turn.tool_calls.append(tool_record)
                     result.tool_calls_count += 1
 
-                    # Append tool result to messages
                     messages.append({
                         "role": "tool",
                         "tool_call_id": call_id,
@@ -271,6 +323,8 @@ class AgentLoop:
                 if self.hooks.on_turn_end:
                     await self.hooks.on_turn_end(turn)
 
+            except (InputGuardrailTriggered, OutputGuardrailTriggered):
+                raise  # Let guardrail exceptions propagate
             except Exception as e:
                 logger.error("AgentLoop error at turn %d: %s", turn_number, e)
                 if self.hooks.on_error:
@@ -280,9 +334,7 @@ class AgentLoop:
                 break
 
         else:
-            # max_turns exceeded
             result.stopped_reason = "max_turns"
-            # Use the last LLM content as output if available
             if result.turns and result.turns[-1].llm_output:
                 result.final_output = result.turns[-1].llm_output
 
