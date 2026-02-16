@@ -17,7 +17,7 @@ Quick Start:
     bot.run()
 """
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 from zapry_bot_sdk.core.config import BotConfig
 from zapry_bot_sdk.core.bot import ZapryBot
@@ -30,6 +30,9 @@ from zapry_bot_sdk.proactive.feedback import (
     build_preference_prompt,
 )
 from zapry_bot_sdk.tools.registry import ToolRegistry, ToolDef, ToolContext, tool
+from zapry_bot_sdk.memory.session import MemorySession
+from zapry_bot_sdk.memory.store import InMemoryStore
+from zapry_bot_sdk.memory.store_sqlite import SQLiteMemoryStore
 
 __all__ = [
     "ZapryBot",
@@ -48,5 +51,8 @@ __all__ = [
     "ToolDef",
     "ToolContext",
     "tool",
+    "MemorySession",
+    "InMemoryStore",
+    "SQLiteMemoryStore",
     "__version__",
 ]

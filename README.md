@@ -19,6 +19,7 @@
 - **Middleware 管道** — 洋葱模型中间件，支持 before/after、拦截、上下文传递
 - **Tool Calling 框架** — `@tool` 装饰器自动生成 JSON schema，`ToolRegistry` 统一管理
 - **OpenAI 适配器** — `OpenAIToolAdapter` 一键对接 OpenAI function calling
+- **Memory 持久化** — 三层记忆模型（工作/短期/长期），可插拔存储，自动提取，Zapry 云端预留
 
 ## 快速开始
 
@@ -256,6 +257,67 @@ if response.choices[0].message.tool_calls:
     messages.extend(adapter.results_to_messages(results))
 ```
 
+## Memory 持久化框架
+
+三层记忆模型，按 `{agent_id}:{user_id}` 隔离，可插拔存储后端。
+
+```python
+from zapry_bot_sdk.memory import MemorySession, InMemoryStore, SQLiteMemoryStore
+
+# 创建 session（agent+user 隔离）
+session = MemorySession(
+    agent_id="my_agent",
+    user_id="user_123",
+    store=SQLiteMemoryStore("memory.db"),  # 或 InMemoryStore()
+)
+
+# 加载所有记忆
+ctx = await session.load()
+# ctx.short_term  → 对话历史
+# ctx.long_term   → 用户档案
+# ctx.working     → 会话临时数据
+
+# 添加消息（自动持久化 + 缓冲区管理）
+await session.add_message("user", "我今年25岁，在上海做程序员")
+await session.add_message("assistant", "了解了~")
+
+# 获取可注入 LLM 的 prompt
+prompt = session.format_for_prompt()
+
+# 自动记忆提取（需设置 extractor）
+from zapry_bot_sdk.memory import LLMMemoryExtractor
+session.extractor = LLMMemoryExtractor(llm_fn=my_llm_call)
+await session.extract_if_needed()
+
+# 手动更新长期记忆
+await session.update_long_term({"basic_info": {"age": 25}})
+
+# 清空
+await session.clear_history()  # 只清对话
+await session.clear_all()      # 清除所有
+```
+
+### 存储后端
+
+| 后端 | 用途 | 持久化 |
+|------|------|--------|
+| `InMemoryStore` | 开发/测试 | 否 |
+| `SQLiteMemoryStore` | 本地生产 | 是 |
+| `ZapryCloudStore` | Zapry 云端托管（预留） | 是 |
+
+### 与 Middleware 集成
+
+```python
+async def memory_middleware(ctx, next_fn):
+    session = MemorySession("bot", get_user_id(ctx.update), store)
+    await session.load()
+    ctx.extra["session"] = session
+    await next_fn()
+    await session.extract_if_needed()
+
+bot.use(memory_middleware)
+```
+
 ## 项目结构
 
 ```
@@ -276,6 +338,17 @@ zapry-bot-sdk/
 │   ├── tools/
 │   │   ├── registry.py      # @tool 装饰器 + ToolRegistry + schema 生成
 │   │   └── openai_adapter.py # OpenAI function calling 适配器
+│   ├── memory/
+│   │   ├── session.py       # MemorySession 便捷 API
+│   │   ├── store.py         # MemoryStore Protocol + InMemoryStore
+│   │   ├── store_sqlite.py  # SQLiteMemoryStore
+│   │   ├── short_term.py    # ShortTermMemory 对话历史
+│   │   ├── long_term.py     # LongTermMemory 用户档案
+│   │   ├── working.py       # WorkingMemory 会话临时数据
+│   │   ├── buffer.py        # ConversationBuffer 对话缓冲
+│   │   ├── extractor.py     # MemoryExtractor + LLMMemoryExtractor
+│   │   ├── formatter.py     # prompt 注入格式化
+│   │   └── types.py         # 数据类型定义
 │   └── utils/
 │       ├── telegram_compat.py   # Zapry 兼容层
 │       └── logger.py            # 日志工具
@@ -283,7 +356,8 @@ zapry-bot-sdk/
     ├── test_compat.py       # 兼容层测试
     ├── test_proactive.py    # 主动触发 & 反馈检测测试（44 项）
     ├── test_middleware.py   # Middleware 管道测试（9 项）
-    └── test_tools.py        # Tool Calling + OpenAI 适配器测试（32 项）
+    ├── test_tools.py        # Tool Calling + OpenAI 适配器测试（32 项）
+    └── test_memory.py       # Memory 框架全量测试（55 项）
 ```
 
 ## Zapry 兼容性
