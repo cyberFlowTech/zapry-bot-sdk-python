@@ -17,7 +17,7 @@ Quick Start:
     bot.run()
 """
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 
 from zapry_bot_sdk.core.config import BotConfig
 from zapry_bot_sdk.core.bot import ZapryBot
@@ -33,6 +33,7 @@ from zapry_bot_sdk.tools.registry import ToolRegistry, ToolDef, ToolContext, too
 from zapry_bot_sdk.memory.session import MemorySession
 from zapry_bot_sdk.memory.store import InMemoryStore
 from zapry_bot_sdk.memory.store_sqlite import SQLiteMemoryStore
+from zapry_bot_sdk.agent.loop import AgentLoop, AgentResult, AgentHooks
 
 __all__ = [
     "ZapryBot",
@@ -54,5 +55,8 @@ __all__ = [
     "MemorySession",
     "InMemoryStore",
     "SQLiteMemoryStore",
+    "AgentLoop",
+    "AgentResult",
+    "AgentHooks",
     "__version__",
 ]

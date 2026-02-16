@@ -20,6 +20,7 @@
 - **Tool Calling 框架** — `@tool` 装饰器自动生成 JSON schema，`ToolRegistry` 统一管理
 - **OpenAI 适配器** — `OpenAIToolAdapter` 一键对接 OpenAI function calling
 - **Memory 持久化** — 三层记忆模型（工作/短期/长期），可插拔存储，自动提取，Zapry 云端预留
+- **Agent Loop** — ReAct 自动推理循环，LLM 自主调用工具直到产出最终回答
 
 ## 快速开始
 
@@ -318,6 +319,69 @@ async def memory_middleware(ctx, next_fn):
 bot.use(memory_middleware)
 ```
 
+## Agent Loop（自动推理循环）
+
+ReAct 模式：LLM 自主决策调用工具、获取结果、再决策，直到产出最终回答。
+
+```python
+from zapry_bot_sdk.agent import AgentLoop
+from zapry_bot_sdk.tools import ToolRegistry, tool
+
+@tool
+async def get_weather(city: str) -> str:
+    """获取天气。"""
+    return f"{city}: 25°C"
+
+registry = ToolRegistry()
+registry.register(get_weather)
+
+async def my_llm(messages, tools=None):
+    response = await openai_client.chat.completions.create(
+        model="gpt-4o", messages=messages, tools=tools,
+    )
+    return response.choices[0].message
+
+loop = AgentLoop(
+    llm_fn=my_llm,
+    tool_registry=registry,
+    system_prompt="You are a helpful assistant.",
+    max_turns=10,  # 防止无限循环
+)
+
+result = await loop.run("上海天气怎么样？")
+print(result.final_output)       # "上海现在 25°C，晴天。"
+print(result.tool_calls_count)   # 1
+print(result.total_turns)        # 2 (1次工具调用 + 1次最终回答)
+print(result.stopped_reason)     # "completed"
+```
+
+### 事件钩子（可观测性）
+
+```python
+from zapry_bot_sdk.agent import AgentHooks
+
+hooks = AgentHooks(
+    on_llm_start=lambda turn, msgs: print(f"Turn {turn}: calling LLM..."),
+    on_tool_start=lambda name, args: print(f"Calling tool: {name}"),
+    on_tool_end=lambda name, result, err: print(f"Tool result: {result}"),
+    on_error=lambda e: print(f"Error: {e}"),
+)
+loop = AgentLoop(llm_fn=my_llm, tool_registry=registry, hooks=hooks)
+```
+
+### 与 Memory 集成
+
+```python
+session = MemorySession("my_agent", "user_123", store)
+ctx = await session.load()
+
+result = await loop.run(
+    "记住我的生日是10月15日",
+    conversation_history=await session.short_term.get_history_dicts(),
+    extra_context=session.format_for_prompt(),
+)
+```
+
 ## 项目结构
 
 ```
@@ -338,6 +402,8 @@ zapry-bot-sdk/
 │   ├── tools/
 │   │   ├── registry.py      # @tool 装饰器 + ToolRegistry + schema 生成
 │   │   └── openai_adapter.py # OpenAI function calling 适配器
+│   ├── agent/
+│   │   └── loop.py          # AgentLoop ReAct 推理循环
 │   ├── memory/
 │   │   ├── session.py       # MemorySession 便捷 API
 │   │   ├── store.py         # MemoryStore Protocol + InMemoryStore
@@ -357,7 +423,8 @@ zapry-bot-sdk/
     ├── test_proactive.py    # 主动触发 & 反馈检测测试（44 项）
     ├── test_middleware.py   # Middleware 管道测试（9 项）
     ├── test_tools.py        # Tool Calling + OpenAI 适配器测试（32 项）
-    └── test_memory.py       # Memory 框架全量测试（55 项）
+    ├── test_memory.py       # Memory 框架全量测试（55 项）
+    └── test_agent_loop.py   # AgentLoop 测试（17 项）
 ```
 
 ## Zapry 兼容性
