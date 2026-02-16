@@ -43,6 +43,7 @@ Usage::
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from dataclasses import dataclass, field
@@ -166,36 +167,63 @@ class AgentLoop:
         conversation_history: Optional[List[Dict]] = None,
         extra_context: Optional[str] = None,
     ) -> AgentResult:
-        """Execute the agent loop.
+        """Execute the agent loop (backwards compatible, no cancellation).
+
+        For cancellation support, use :meth:`run_with_cancel` instead.
+        """
+        return await self._run_core(user_input, conversation_history, extra_context)
+
+    async def run_with_cancel(
+        self,
+        cancel_event: asyncio.Event,
+        user_input: str,
+        conversation_history: Optional[List[Dict]] = None,
+        extra_context: Optional[str] = None,
+    ) -> AgentResult:
+        """Execute the agent loop with external cancel support.
+
+        When *cancel_event* is set, the loop stops at the next check point
+        and returns ``stopped_reason="cancelled"``.
 
         Parameters:
+            cancel_event: An ``asyncio.Event``. Set it to cancel the run.
             user_input: The user's message.
             conversation_history: Optional prior conversation messages.
-            extra_context: Optional extra system context (e.g. memory prompt).
+            extra_context: Optional extra system context.
 
         Returns:
-            AgentResult with final output, turn trace, and statistics.
-
-        Raises:
-            InputGuardrailTriggered: If an input guardrail blocks the request.
-            OutputGuardrailTriggered: If an output guardrail blocks the response.
+            AgentResult with ``stopped_reason`` set to ``"cancelled"`` if interrupted.
         """
-        # --- Tracing: start agent span ---
+        return await self._run_core(user_input, conversation_history, extra_context, cancel_event)
+
+    async def _run_core(
+        self,
+        user_input: str,
+        conversation_history: Optional[List[Dict]] = None,
+        extra_context: Optional[str] = None,
+        cancel_event: Optional[asyncio.Event] = None,
+    ) -> AgentResult:
+        """Internal run implementation shared by run() and run_with_cancel()."""
         tracer = self.tracer
         if tracer and tracer.enabled:
             tracer.new_trace()
             with tracer.agent_span("agent_loop", user_input=user_input[:200]):
-                return await self._run_inner(user_input, conversation_history, extra_context)
+                return await self._run_inner(user_input, conversation_history, extra_context, cancel_event)
         else:
-            return await self._run_inner(user_input, conversation_history, extra_context)
+            return await self._run_inner(user_input, conversation_history, extra_context, cancel_event)
 
     async def _run_inner(
         self,
         user_input: str,
         conversation_history: Optional[List[Dict]],
         extra_context: Optional[str],
+        cancel_event: Optional[asyncio.Event] = None,
     ) -> AgentResult:
         tracer = self.tracer
+
+        # --- Check cancellation before starting ---
+        if cancel_event and cancel_event.is_set():
+            return AgentResult(stopped_reason="cancelled")
 
         # --- Input Guardrails ---
         if self.guardrails and self.guardrails.input_count > 0:
@@ -222,6 +250,11 @@ class AgentLoop:
         turn_number = 0
 
         while turn_number < self.max_turns:
+            # --- Check cancellation at start of each turn ---
+            if cancel_event and cancel_event.is_set():
+                result.stopped_reason = "cancelled"
+                break
+
             turn_number += 1
             turn = TurnRecord(turn_number=turn_number)
 
@@ -235,6 +268,11 @@ class AgentLoop:
                         llm_response = await self.llm_fn(messages, tools_schema)
                 else:
                     llm_response = await self.llm_fn(messages, tools_schema)
+
+                # Check cancellation after LLM call
+                if cancel_event and cancel_event.is_set():
+                    result.stopped_reason = "cancelled"
+                    break
 
                 if self.hooks.on_llm_end:
                     await self.hooks.on_llm_end(turn_number, llm_response)
@@ -271,7 +309,13 @@ class AgentLoop:
                     assistant_msg["tool_calls"] = raw_tool_calls
                 messages.append(assistant_msg)
 
+                cancelled = False
                 for tc in tool_calls:
+                    # Check cancellation before each tool execution
+                    if cancel_event and cancel_event.is_set():
+                        cancelled = True
+                        break
+
                     call_id = _get_attr(tc, "id") or ""
                     func = _get_attr(tc, "function") or tc
                     func_name = _get_attr(func, "name") or ""
@@ -318,6 +362,11 @@ class AgentLoop:
                         "tool_call_id": call_id,
                         "content": tool_result_str,
                     })
+
+                if cancelled:
+                    result.stopped_reason = "cancelled"
+                    result.turns.append(turn)
+                    break
 
                 result.turns.append(turn)
                 if self.hooks.on_turn_end:

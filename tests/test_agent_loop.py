@@ -2,6 +2,7 @@
 AgentLoop 全量测试 — 模拟 LLM 响应来验证 ReAct 循环的所有行为。
 """
 
+import asyncio
 import json
 import pytest
 
@@ -406,3 +407,80 @@ class TestAgentLoopEdgeCases:
         result = await loop.run("test")
 
         assert result.final_output == "Direct answer"
+
+
+# ══════════════════════════════════════════════
+# run_with_cancel tests
+# ══════════════════════════════════════════════
+
+
+class TestRunWithCancel:
+    """Tests for AgentLoop.run_with_cancel()."""
+
+    @pytest.mark.asyncio
+    async def test_cancel_before_llm(self, registry):
+        """cancel_event already set → stopped_reason='cancelled', LLM never called."""
+        llm_called = False
+
+        async def llm_fn(messages, tools=None):
+            nonlocal llm_called
+            llm_called = True
+            return make_final_response("should not reach")
+
+        cancel_event = asyncio.Event()
+        cancel_event.set()  # cancel immediately
+
+        loop = AgentLoop(llm_fn=llm_fn, tool_registry=registry)
+        result = await loop.run_with_cancel(cancel_event, "hello")
+
+        assert result.stopped_reason == "cancelled"
+        assert not llm_called
+        assert result.total_turns == 0
+
+    @pytest.mark.asyncio
+    async def test_cancel_during_tool_exec(self, registry):
+        """cancel_event set after first tool → second tool skipped."""
+        tool_exec_count = 0
+        cancel_event = asyncio.Event()
+
+        @tool
+        async def counting_tool(city: str) -> str:
+            """Count calls."""
+            nonlocal tool_exec_count
+            tool_exec_count += 1
+            if tool_exec_count == 1:
+                cancel_event.set()  # cancel after first tool
+            return f"{city}: 25°C"
+
+        reg = ToolRegistry()
+        reg.register(counting_tool)
+
+        call_num = 0
+
+        async def llm_fn(messages, tools=None):
+            nonlocal call_num
+            call_num += 1
+            if call_num == 1:
+                return make_tool_call_response([
+                    ("counting_tool", {"city": "A"}),
+                    ("counting_tool", {"city": "B"}),
+                ])
+            return make_final_response("done")
+
+        loop = AgentLoop(llm_fn=llm_fn, tool_registry=reg)
+        result = await loop.run_with_cancel(cancel_event, "weather")
+
+        assert result.stopped_reason == "cancelled"
+        assert tool_exec_count == 1  # second tool skipped
+
+    @pytest.mark.asyncio
+    async def test_run_backwards_compat(self, registry):
+        """run() without cancel should behave exactly as before."""
+        async def llm_fn(messages, tools=None):
+            return make_final_response("Hello!")
+
+        loop = AgentLoop(llm_fn=llm_fn, tool_registry=registry)
+        result = await loop.run("hi")
+
+        assert result.final_output == "Hello!"
+        assert result.stopped_reason == "completed"
